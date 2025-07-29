@@ -19,6 +19,7 @@ mod lmp_full_processor;
 mod disclosure_processor;
 mod disclosure_fast_processor;
 mod bess_analyzer;
+mod bess_revenue_calculator;
 
 fn extract_year_from_filename(filename: &str) -> Option<u16> {
     // Look for pattern like .20240823. (YYYYMMDD) or _20240823_
@@ -255,6 +256,9 @@ fn main() -> Result<()> {
     } else if args.len() > 1 && args[1] == "--bess" {
         // Analyze BESS resources
         bess_analyzer::analyze_bess_resources()?;
+    } else if args.len() > 1 && args[1] == "--bess-revenue" {
+        // Calculate BESS revenues
+        bess_revenue_calculator::calculate_bess_revenues()?;
     } else {
         // Process only RT Settlement Point Prices (original functionality)
         println!("🚀 ERCOT RT Settlement Point Prices - Rust Processor");

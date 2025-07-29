@@ -12,7 +12,7 @@ glob = "0.3"
 anyhow = "1.0"
 indicatif = "0.17"
 num_cpus = "1.16"
-polars = { version = "0.35", features = ["lazy", "csv", "parquet", "ipc"] }
+polars = { version = "0.35", features = ["lazy", "csv", "parquet", "ipc", "temporal"] }
 zip = "0.6"
 regex = "1.10"
 
