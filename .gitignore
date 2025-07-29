@@ -1,0 +1,52 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# Data directories
+/test_data/
+/annual_data/
+/dam_data/
+/ancillary_data/
+/lmp_annual_data/
+/disclosure_data/
+/bess_analysis/
+*.csv
+*.parquet
+*.arrow
+*.zip
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+
+# Python files (if any)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Backup files
+*.bak
+*.backup
+
+# Cache directories
+.cache/
