@@ -51,6 +51,5 @@ venv/
 # Cache directories
 .cache/
 # Analysis output directories
-/bess_complete_analysis/
 /annual_output/
 /processed_ercot_data/
