@@ -20,6 +20,154 @@ mod disclosure_processor;
 mod disclosure_fast_processor;
 mod bess_analyzer;
 mod bess_revenue_calculator;
+mod bess_visualization;
+mod bess_market_report;
+mod bess_yearly_analysis;
+mod ercot_unified_processor;
+mod unified_processor;
+mod csv_extractor;
+mod annual_processor;
+
+fn verify_data_quality(_dir: &Path) -> Result<()> {
+    println!("\n🔍 Data Quality Verification");
+    println!("{}", "=".repeat(60));
+    
+    // Find all processed files
+    let patterns = vec![
+        "processed_ercot_data/**/*.parquet",
+        "annual_data/*.parquet",
+        "dam_annual_data/*.parquet",
+        "lmp_annual_data/*.parquet",
+        "ancillary_annual_data/*.parquet"
+    ];
+    
+    let mut total_issues = 0;
+    
+    for pattern in patterns {
+        let files: Vec<PathBuf> = glob(pattern)?
+            .filter_map(Result::ok)
+            .collect();
+            
+        if files.is_empty() {
+            continue;
+        }
+        
+        println!("\n📁 Checking {} files in {}", files.len(), pattern);
+        
+        for file in files {
+            println!("\n  Verifying: {}", file.file_name().unwrap().to_str().unwrap());
+            
+            // Read the parquet file
+            let df = LazyFrame::scan_parquet(&file, Default::default())?
+                .collect()?;
+                
+            // Get datetime column name (could be datetime, DeliveryDate, etc)
+            let datetime_col = if df.get_column_names().contains(&"datetime") {
+                "datetime"
+            } else if df.get_column_names().contains(&"DeliveryDate") {
+                "DeliveryDate"
+            } else if df.get_column_names().contains(&"timestamp") {
+                "timestamp"
+            } else {
+                println!("    ⚠️  No datetime column found");
+                continue;
+            };
+            
+            // Get location column name (could be SettlementPoint, BusName, etc)
+            let location_col = if df.get_column_names().contains(&"SettlementPoint") {
+                "SettlementPoint"
+            } else if df.get_column_names().contains(&"BusName") {
+                "BusName"
+            } else if df.get_column_names().contains(&"location") {
+                "location"
+            } else {
+                println!("    ⚠️  No location column found");
+                continue;
+            };
+            
+            // Check for duplicates
+            let duplicate_check = df.clone().lazy()
+                .group_by([col(datetime_col), col(location_col)])
+                .agg([col(datetime_col).count().alias("count")])
+                .filter(col("count").gt(1))
+                .collect()?;
+                
+            if duplicate_check.height() > 0 {
+                println!("    ❌ Found {} duplicate entries", duplicate_check.height());
+                total_issues += duplicate_check.height();
+            } else {
+                println!("    ✅ No duplicates found");
+            }
+            
+            // Check for gaps (only for 5-minute interval data)
+            if file.to_str().unwrap().contains("RT_") {
+                // Sort by datetime and check intervals
+                let sorted_df = df.clone().lazy()
+                    .sort(datetime_col, Default::default())
+                    .collect()?;
+                    
+                // Get unique timestamps
+                let timestamps = sorted_df.column(datetime_col)?
+                    .unique()?;
+                    
+                let mut gaps_found = 0;
+                if let Ok(datetime_series) = timestamps.datetime() {
+                    let values: Vec<Option<i64>> = datetime_series.into_iter().collect();
+                    
+                    for i in 1..values.len() {
+                        if let (Some(prev), Some(curr)) = (values[i-1], values[i]) {
+                            let diff_minutes = (curr - prev) / (60 * 1000); // milliseconds to minutes
+                            
+                            // For RT data, expect 5-minute intervals
+                            if diff_minutes > 5 && diff_minutes < 60 {
+                                gaps_found += 1;
+                            }
+                        }
+                    }
+                }
+                
+                if gaps_found > 0 {
+                    println!("    ⚠️  Found {} gaps in time series", gaps_found);
+                    total_issues += gaps_found;
+                } else {
+                    println!("    ✅ No gaps in time series");
+                }
+            }
+            
+            // Check if data is sorted
+            let sorted_check = df.clone().lazy()
+                .with_column(col(datetime_col).alias("datetime_sorted"))
+                .sort("datetime_sorted", Default::default())
+                .collect()?;
+                
+            let original_datetimes = df.column(datetime_col)?;
+            let sorted_datetimes = sorted_check.column("datetime_sorted")?;
+            
+            let is_sorted = original_datetimes.equal(sorted_datetimes)?;
+            if !is_sorted.all() {
+                println!("    ⚠️  Data is not sorted by datetime");
+                total_issues += 1;
+            } else {
+                println!("    ✅ Data is properly sorted");
+            }
+            
+            // Basic statistics
+            println!("    📊 Total records: {}", df.height());
+            if let Ok(unique_points) = df.column(location_col) {
+                println!("    📊 Unique locations: {}", unique_points.n_unique()?);
+            }
+        }
+    }
+    
+    println!("\n{}", "=".repeat(60));
+    if total_issues == 0 {
+        println!("✅ Data quality verification passed! No issues found.");
+    } else {
+        println!("⚠️  Data quality verification found {} issues", total_issues);
+    }
+    
+    Ok(())
+}
 
 fn extract_year_from_filename(filename: &str) -> Option<u16> {
     // Look for pattern like .20240823. (YYYYMMDD) or _20240823_
@@ -175,13 +323,19 @@ fn process_year_files(year: u16, files: &[PathBuf], output_dir: &Path) -> Result
             col("SettlementPoint"),
             price_col.alias("SettlementPointPrice"),
         ])
-        .sort("datetime", Default::default())
         .collect()?;
     
-    // Remove duplicates
+    // Remove duplicates first (keeping the last occurrence)
+    println!("  🧹 Removing duplicates...");
     let unique_df = final_df.unique(Some(&["datetime".to_string(), "SettlementPoint".to_string()]), UniqueKeepStrategy::Last, None)?;
     
-    println!("  📊 Final record count: {}", unique_df.height());
+    // Sort by datetime and settlement point
+    println!("  🔄 Sorting data...");
+    let sorted_df = unique_df.lazy()
+        .sort_by_exprs([col("datetime"), col("SettlementPoint")], [false, false], false, false)
+        .collect()?;
+    
+    println!("  📊 Final record count: {}", sorted_df.height());
     
     // Save files
     let base_name = format!("RT_Settlement_Point_Prices_{}", year);
@@ -190,19 +344,19 @@ fn process_year_files(year: u16, files: &[PathBuf], output_dir: &Path) -> Result
     let csv_path = output_dir.join(format!("{}.csv", base_name));
     println!("  💾 Saving CSV...");
     CsvWriter::new(std::fs::File::create(&csv_path)?)
-        .finish(&mut unique_df.clone())?;
+        .finish(&mut sorted_df.clone())?;
     
     // Parquet
     let parquet_path = output_dir.join(format!("{}.parquet", base_name));
     println!("  📦 Saving Parquet...");
     ParquetWriter::new(std::fs::File::create(&parquet_path)?)
-        .finish(&mut unique_df.clone())?;
+        .finish(&mut sorted_df.clone())?;
     
     // Arrow IPC (similar to .arrow)
     let arrow_path = output_dir.join(format!("{}.arrow", base_name));
     println!("  🏹 Saving Arrow IPC...");
     IpcWriter::new(std::fs::File::create(&arrow_path)?)
-        .finish(&mut unique_df.clone())?;
+        .finish(&mut sorted_df.clone())?;
     
     println!("  ✅ Completed year {}", year);
     Ok(())
@@ -259,6 +413,45 @@ fn main() -> Result<()> {
     } else if args.len() > 1 && args[1] == "--bess-revenue" {
         // Calculate BESS revenues
         bess_revenue_calculator::calculate_bess_revenues()?;
+    } else if args.len() > 1 && args[1] == "--bess-report" {
+        // Generate comprehensive BESS market report
+        bess_market_report::generate_market_report()?;
+    } else if args.len() > 1 && args[1] == "--bess-yearly" {
+        // Generate yearly BESS analysis
+        bess_yearly_analysis::generate_yearly_analysis()?;
+    } else if args.len() > 1 && args[1] == "--bess-viz" {
+        // Generate BESS visualizations
+        bess_visualization::generate_bess_visualizations()?;
+    } else if args.len() > 1 && args[1] == "--process-ercot" {
+        // Process all ERCOT data from source directories
+        ercot_unified_processor::process_all_ercot_data()?;
+    } else if args.len() > 1 && args[1] == "--unified" {
+        // Process data with unified processor (recursive unzip, dedup, etc.)
+        unified_processor::process_unified_data()?;
+    } else if args.len() > 1 && args[1] == "--extract-csv" {
+        // Extract all CSV files from nested ZIPs into a single csv folder
+        if args.len() > 2 {
+            let input_dir = PathBuf::from(&args[2]);
+            csv_extractor::extract_csv_from_directory(input_dir)?;
+        } else {
+            println!("Usage: --extract-csv <directory>");
+            println!("Example: --extract-csv /path/to/ERCOT_data");
+        }
+    } else if args.len() > 1 && args[1] == "--extract-all-ercot" {
+        // Extract all ERCOT directories listed in ercot_directories.csv
+        if args.len() > 2 {
+            let base_dir = PathBuf::from(&args[2]);
+            csv_extractor::extract_all_ercot_directories(base_dir)?;
+        } else {
+            println!("Usage: --extract-all-ercot <base_directory>");
+            println!("Example: --extract-all-ercot /Users/enrico/data/ERCOT_data");
+        }
+    } else if args.len() > 1 && args[1] == "--process-annual" {
+        // Process extracted CSV files into annual CSV, Parquet, and Arrow files
+        annual_processor::process_all_annual_data()?;
+    } else if args.len() > 1 && args[1] == "--verify-results" {
+        // Verify data quality of processed files
+        verify_data_quality(&PathBuf::from("."))?;
     } else {
         // Process only RT Settlement Point Prices (original functionality)
         println!("🚀 ERCOT RT Settlement Point Prices - Rust Processor");

@@ -2,7 +2,7 @@ use anyhow::Result;
 use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]

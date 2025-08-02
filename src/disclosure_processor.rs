@@ -3,7 +3,7 @@ use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::*;
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub struct DisclosureProcessor {

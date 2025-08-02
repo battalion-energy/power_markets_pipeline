@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::path::PathBuf;
-use std::io::Write;
 
 pub fn extract_and_process_historical() -> Result<()> {
     println!("📦 Extracting and processing historical ERCOT data...");

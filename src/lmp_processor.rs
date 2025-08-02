@@ -5,7 +5,6 @@ use polars::prelude::*;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::io::Write;
 
 pub struct LmpProcessor {
     spaces_dir: PathBuf,

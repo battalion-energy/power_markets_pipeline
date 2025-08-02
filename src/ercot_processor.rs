@@ -2,18 +2,18 @@ use anyhow::Result;
 use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::*;
-use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::io::Read;
 
-pub enum DataType {
-    RealtimeSettlement,
-    DayAheadSettlement,
-    HistoricalDAM,
-    HistoricalRTM,
-    AncillaryServices,
-}
+// Commenting out unused enum - may be used in future
+// pub enum DataType {
+//     RealtimeSettlement,
+//     DayAheadSettlement,
+//     HistoricalDAM,
+//     HistoricalRTM,
+//     AncillaryServices,
+// }
 
 pub struct ErcotProcessor {
     output_dir: PathBuf,
