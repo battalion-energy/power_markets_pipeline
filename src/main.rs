@@ -23,6 +23,11 @@ mod bess_revenue_calculator;
 mod bess_visualization;
 mod bess_market_report;
 mod bess_yearly_analysis;
+mod bess_comprehensive_calculator;
+mod bess_parquet_calculator;
+mod bess_disclosure_analyzer;
+mod bess_full_disclosure_analyzer;
+mod bess_complete_analyzer;
 mod ercot_unified_processor;
 mod unified_processor;
 mod csv_extractor;
@@ -411,8 +416,8 @@ fn main() -> Result<()> {
         // Analyze BESS resources
         bess_analyzer::analyze_bess_resources()?;
     } else if args.len() > 1 && args[1] == "--bess-revenue" {
-        // Calculate BESS revenues
-        bess_revenue_calculator::calculate_bess_revenues()?;
+        // Calculate BESS revenues using Parquet files
+        bess_parquet_calculator::calculate_bess_revenues_from_parquet()?;
     } else if args.len() > 1 && args[1] == "--bess-report" {
         // Generate comprehensive BESS market report
         bess_market_report::generate_market_report()?;
@@ -422,6 +427,18 @@ fn main() -> Result<()> {
     } else if args.len() > 1 && args[1] == "--bess-viz" {
         // Generate BESS visualizations
         bess_visualization::generate_bess_visualizations()?;
+    } else if args.len() > 1 && args[1] == "--bess-comprehensive" {
+        // Run comprehensive BESS analysis using Parquet data
+        bess_comprehensive_calculator::run_comprehensive_bess_analysis()?;
+    } else if args.len() > 1 && args[1] == "--bess-disclosure" {
+        // Analyze BESS revenues from 60-day disclosure data
+        bess_disclosure_analyzer::analyze_bess_disclosure_revenues()?;
+    } else if args.len() > 1 && args[1] == "--bess-full-disclosure" {
+        // Run complete BESS analysis with full 60-day disclosure dataset
+        bess_full_disclosure_analyzer::analyze_bess_with_full_disclosure()?;
+    } else if args.len() > 1 && args[1] == "--bess-complete" {
+        // Run complete BESS revenue analysis with all data sources
+        bess_complete_analyzer::run_complete_bess_analysis()?;
     } else if args.len() > 1 && args[1] == "--process-ercot" {
         // Process all ERCOT data from source directories
         ercot_unified_processor::process_all_ercot_data()?;
